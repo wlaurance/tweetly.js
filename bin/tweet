@@ -5,8 +5,10 @@ var twitter = require('ntwitter'),
     querystring = require('querystring'),
     fs = require('fs'),
     path = require('path'),
-    exec = require('child_process').exec
-    tokenMachine = require('browser-token-machine');
+    exec = require('child_process').exec,
+    tokenMachine = require('browser-token-machine'),
+    readline = require('readline'),
+    gspell = require('gspell');
 
 var request_token_url = 'https://api.twitter.com/oauth/request_token',
     access_token_url = 'https://api.twitter.com/oauth/access_token',
@@ -18,6 +20,8 @@ var CONSUMER_KEY = "7yE8GpWpUlp2dHcEvOlzQ",
 
 var KEY_PATH = path.normalize(path.join(process.env.HOME, ".tweetlykey"));
 
+var settings = '';
+
 var oauth = new oauth.OAuth(
   request_token_url,
   access_token_url,
@@ -27,13 +31,41 @@ var oauth = new oauth.OAuth(
 
 var tweet = function(twit) {
   if (process.argv.length == 3) {
-    twit.updateStatus(process.argv[2], function (err, data) {
-      if (err) {
-        console.log(err);
-      } else {
-        console.log("Tweeted: " + process.argv[2]);
+    updateStatus = function(){
+      twit.updateStatus(process.argv[2], function (err, data) {
+        if (err) {
+          console.log(err);
+        } else {
+          console.log("Tweeted: " + process.argv[2]);
+        }
+      });
+    };
+    if (settings[2] == 'true'){
+      gspell.check(process.argv[2], function(err, res){
+        if (typeof res.spellresult.c == 'undefined')
+          updateStatus();
+        else {
+          console.log('You have spelling suggestions');
+          for(var i in res.spellresult.c){
+            console.log(res.spellresult.c[i].opts);
+          }
+          rl = readline.createInterface({input:process.stdin,output:process.stdout});
+          rl.question('Ignore spelling suggestions? [yN]', function(answer){
+            if (answer === 'y' || answer === 'Y')
+              updateStatus();
+            rl.close();
+          });
+        }
+      });
+    } else {
+      updateStatus();
+    }
+  } else if (process.argv.length == 4) {
+    if (process.argv[2] === '-c' || process.argv[2] === '--configure') {
+      if (process.argv[3] === 'settings'){
+        editSettings();
       }
-    });
+    }
   }
 };
 
@@ -99,7 +131,8 @@ var readConfigFile = function() {
           console.error("Could not open file: %s", err);
         } else {
           var arr = data.split("\n");
-          if (arr.length == 2) {
+          settings = arr;
+          if (arr.length >= 2) {
             initUser(arr[0], arr[1]);
           }
         }
@@ -112,6 +145,25 @@ var readConfigFile = function() {
 
 var startApp = function() {
   readConfigFile();
+};
+
+var editSettings = function() {
+  rl = readline.createInterface({
+    input:process.stdin,
+    output:process.stdout
+  });
+  rl.question('Want to add spell protection? [yN]', function(add_spell){
+    settings[2] = add_spell === 'y' || add_spell === 'Y';
+    fs.writeFile(KEY_PATH, settings.join('\n'), function(err) {
+      if (err) {
+        console.log(err);
+      } else {
+        if (settings[2])
+          console.log('We have added spell protection \n');
+      }
+      rl.close();
+    });
+  });
 };
 
 startApp();
